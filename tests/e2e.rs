@@ -1,5 +1,8 @@
 //! End-to-end test for the binary, through the `HANGMAN_WORD` env seam.
-//! Owned by **Agent D**. Contract: `docs/contracts/cli.md`.
+//! Owned by **Agent D** (e2e) / **Agent E** (the front-end it drives).
+//! The binary runs the TUI in its headless transport (piped stdin),
+//! which preserves the line-based input semantics these tests script.
+//! Contract: `docs/contracts/tui.md`.
 
 use std::io::Write;
 use std::process::{Command, Stdio};

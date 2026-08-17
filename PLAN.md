@@ -12,15 +12,21 @@ A terminal hangman in idiomatic Rust, built under two hard constraints:
 ## Architecture
 
 ```
-words ──▶ game ──▶ ui ──▶ cli ──▶ main
-(data)  (core) (render) (glue)  (5 lines)
+words ──▶ game ──▶ ui ──▶ tui ──▶ main
+(data)  (core) (content)(front-end) (5 lines)
 ```
 
 - `words` — word pools + random index pick. No dependencies.
 - `game` — pure, immutable state machine. Depends on `words`.
-- `ui` — rendering (pure `data → String`) + stdin helpers. Depends on
-  `game` for one enum only (`LetterOutcome`).
-- `cli` — REPL glue. Depends on all of the above.
+- `ui` — pure presentation content (figure frames, fixed message
+  strings, `data → String`). Depends on `game` for one enum only
+  (`LetterOutcome`).
+- `tui` — the game's only front-end (the REPL), split into three files
+  (`mod.rs` state machine, `frames.rs` layout/rendering, `input.rs`
+  token I/O). TTY: crossterm raw mode + colored in-place frames;
+  headless (piped stdio, e.g. the e2e): line-based input + plain-text
+  frames with the same fixed strings. Depends on `game`, `ui`, `words`,
+  and the `crossterm` crate.
 - `main` — five-line entry point. Already written.
 
 Dependency rule: arrows point one way only. A module never imports a
@@ -47,7 +53,8 @@ inside longer identifiers is fine; the bare token is not.)
 | A     | `src/words.rs`              | `docs/contracts/words.md` | —                                 |
 | B     | `src/game.rs`               | `docs/contracts/game.md`  | `docs/contracts/words.md`         |
 | C     | `src/ui.rs`                 | `docs/contracts/ui.md`    | `docs/contracts/game.md`          |
-| D     | `src/cli.rs`, `tests/e2e.rs`| `docs/contracts/cli.md`   | the three contracts above         |
+| D     | `tests/e2e.rs`              | `docs/contracts/cli.md` (retired; now `tui.md`) | the three contracts above |
+| E     | `src/tui/`                  | `docs/contracts/tui.md`   | `game`, `ui`, `words` contracts   |
 
 Reading rule: an agent reads *its own file + its contract + its direct
 dependency's contract*. It never reads other modules' source. Contracts
@@ -74,6 +81,12 @@ phase 3 merges requests.
 - **Phase 3 (integration, one agent or a human)**: remove the scaffold
   `#![allow(dead_code)]` from `main.rs`, resolve change requests, run
   the full CI (fmt + clippy + tests), polish the README.
+- **Phase 4 (TUI iteration, done)**: introduce `crossterm` and replace
+  the stdio REPL with `src/tui/` as the only front-end (TTY: raw mode
+  + colored in-place frames; headless: line-based input, same fixed
+  strings — so the e2e is unchanged). `src/cli.rs` retired; `ui` reduced
+  to pure content. Gates unchanged: fmt, clippy `-D warnings`, full
+  `cargo test` (incl. e2e + `mut_budget`).
 
 ## Definition of done (per module)
 
@@ -87,8 +100,12 @@ phase 3 merges requests.
 
 - More words: `words.rs` is pure data; split into `words/easy.rs` etc.
   behind the same contract without touching any other module.
-- Bigger screens / TUI: swap `ui` for a different implementation behind
-  the same data-driven signatures; `cli` is untouched.
+- Bigger screens / TUI: **done in Phase 4** — `crossterm` behind
+  `tui`'s private API. Crossterm (not ratatui) because ratatui's
+  `Terminal` buffer needs a mutable binding while crossterm's `execute!`
+  + owned `Event` values do not; `tui` keeps the zero-mutable policy
+  machine-enforced. A richer renderer (widgets, input boxes) is a
+  private change inside `tui` behind the same `run()` contract.
 - Multiplayer: a new module that passes `GameState` values across a
   channel; the core stays pure and immutable.
 - New word sources (files, API): add functions to the `words` contract;
@@ -122,3 +139,20 @@ stay small.
   (`'b' is not in the word.`, `'a' is in the word!`, `You win!`,
   `The word was: C A T`, exit 0). No signature changed. Suggest the
   contract's input be corrected to include `t`.
+- **(E, new `tui.md`)** Phase 4 adds `src/tui/` as the game's only
+  front-end and retires `src/cli.rs`. `crossterm 0.29` is the TUI
+  library (over ratatui, whose `Terminal` buffer requires a mutable
+  binding). The TUI has two transports — TTY (raw mode, alternate
+  screen, colored in-place frames) and headless (one stdin line per
+  event, plain frames) — so the e2e keeps its line-based input, fixed
+  strings, and exit code 0 unchanged. `q` is a letter guess in-round
+  (a word may contain Q); only `Esc` quits a round on the TTY
+  transport.
+- **(E, `cli.md`)** Retired: the REPL behaviors this contract pinned
+  (`HANGMAN_WORD` seam, line input semantics, fixed strings, e2e)
+  survive in `tui` / the headless transport. The file is kept as a
+  short retirement note.
+- **(E, `ui.md`)** The I/O surface (`board`, `print`, `read_line`,
+  `confirm`) is retired — superseded by the TUI's frame renderer and
+  line-based token reader. `ui` is now pure content: `hangman`,
+  `feedback`, `ending` (the fixed strings the e2e asserts on).

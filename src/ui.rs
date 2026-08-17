@@ -1,14 +1,13 @@
-//! Terminal rendering and input. Owned by **Agent C**.
+//! Presentation content: the hangman figure and the fixed message strings.
+//! Owned by **Agent C**.
 //!
 //! Contract: `docs/contracts/ui.md`.
 //!
-//! Data-driven by design: the render functions take plain values
-//! (`usize`, `&str`, `&[char]`), never a live `GameState`, so this module
-//! can be snapshot-tested without any other module being finished. The
-//! only dependency on `game` is the `LetterOutcome` enum (plus the frozen
-//! `MAX_LIVES` constant, which `hangman` uses for its panic bound).
-
-use std::io::{self, Write};
+//! Pure by design: every function is `data -> String`, no I/O. The TUI
+//! (`tui.rs`) composes these strings into its frames; the fixed strings
+//! here are what the e2e test asserts on. The only dependency is on
+//! `game`: the `LetterOutcome` enum plus the frozen `MAX_LIVES` constant,
+//! which `hangman` uses for its panic bound.
 
 use crate::game::{LetterOutcome, MAX_LIVES};
 
@@ -35,26 +34,6 @@ pub fn hangman(lives_left: usize) -> String {
         "lives_left is {lives_left}, expected at most {MAX_LIVES}"
     );
     FRAMES[MAX_LIVES - lives_left].to_string()
-}
-
-/// Full mid-game board: figure, word, guessed letters, remaining lives.
-///
-/// Must contain `display` verbatim and each letter of `guessed` (the e2e
-/// test relies on that). Layout is Agent C's choice; snapshot tests pin it.
-pub fn board(lives_left: usize, display: &str, guessed: &[char]) -> String {
-    let g: String = if guessed.is_empty() {
-        String::from("-")
-    } else {
-        guessed
-            .iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
-    format!(
-        "{figure}\n\nWord: {display}\nGuessed: {g}\nLives: {lives_left}/{MAX_LIVES}",
-        figure = hangman(lives_left),
-    )
 }
 
 /// One-line feedback for a guess. Fixed strings (the e2e test relies on
@@ -87,37 +66,6 @@ pub fn ending(won: bool, answer: &str) -> String {
     }
 }
 
-/// Print `text` (plus a newline) to stdout.
-pub fn print(text: &str) {
-    println!("{text}");
-}
-
-/// Print `prompt` to stdout (no newline), then read one line from stdin,
-/// trimmed. `Err(UnexpectedEof)` on end of input.
-pub fn read_line(prompt: &str) -> io::Result<String> {
-    print!("{prompt}");
-    io::stdout().flush()?;
-    let line = std::io::stdin()
-        .lines()
-        .next()
-        .transpose()?
-        .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "end of input"))?;
-    Ok(line.trim().to_string())
-}
-
-/// Ask a yes/no question, re-asking until the answer is `y`/`n`
-/// (case-insensitive; `yes`/`no` accepted too).
-pub fn confirm(prompt: &str) -> io::Result<bool> {
-    loop {
-        let answer = read_line(prompt)?;
-        match answer.to_ascii_lowercase().as_str() {
-            "y" | "yes" => return Ok(true),
-            "n" | "no" => return Ok(false),
-            _ => print("Please answer y or n."),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,20 +85,6 @@ mod tests {
     #[should_panic]
     fn hangman_above_max_lives_panics() {
         hangman(7);
-    }
-
-    #[test]
-    fn board_contains_display_and_guessed() {
-        let b = board(3, "R _ S T _", &['a', 'd']);
-        assert!(b.contains("R _ S T _"));
-        assert!(b.contains('a'));
-        assert!(b.contains('d'));
-        assert!(b.contains("3/6"));
-    }
-
-    #[test]
-    fn board_handles_empty_guesses() {
-        assert!(board(6, "_ _ _", &[]).contains("_ _ _"));
     }
 
     #[test]
