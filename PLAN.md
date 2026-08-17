@@ -102,4 +102,23 @@ stay small.
 
 (Phase 1–2 agents log contract change requests here.)
 
-- none yet
+- **(A, words.md)** The implementation hint `rand::thread_rng().gen_range(..)`
+  predates rand 0.9.5 (locked by `Cargo.lock`): both names are renamed
+  (`rand::rng()` / `Rng::random_range(..)`) and the old ones emit deprecation
+  warnings, which the `-D warnings` CI gate rejects. `random_index` is
+  implemented with the new names; the frozen signature is unchanged. Suggest
+  the contract be updated to the current rand API in the next pass.
+- **(B, game.md)** Test 5 pins `display == "R _ S _"` for `"RUST"` "after
+  guessing `s`", but the semantics section (revealed letters in place, `_`
+  for hidden) implies `R` is revealed only if `r` was guessed. The test is
+  implemented with the guess sequence `{r, s}`, which yields exactly the
+  pinned string, plus an extra assertion that guessing only `s` gives
+  `"_ _ S _"`. No signature changed. Suggest the contract's guess list be
+  corrected to `r`, `s`.
+- **(D, cli.md)** The e2e win input `1\nb\na\nc\nn\n` can never win with
+  `HANGMAN_WORD=CAT` (the letter `t` is never guessed; `n` is consumed as a
+  letter guess and the run ends in an EOF error, exit 1). The e2e uses
+  `1\nb\na\nc\nt\nn\n`, which satisfies every pinned expected output line
+  (`'b' is not in the word.`, `'a' is in the word!`, `You win!`,
+  `The word was: C A T`, exit 0). No signature changed. Suggest the
+  contract's input be corrected to include `t`.
